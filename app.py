@@ -1,29 +1,50 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import re
 
 # إعدادات صفحة التطبيق
 st.set_page_config(page_title="إدارة العهد والمصاريف الشخصية", page_icon="💰", layout="wide")
 
-# تهيئة قاعدة بيانات مؤقتة في ذاكرة الجلسة (Session State)
+# تهيئة قاعدة بيانات مؤقتة في ذاكرة الجلسة
 if 'transactions' not in st.session_state:
     st.session_state['transactions'] = pd.DataFrame(columns=[
         'التاريخ', 'النوع', 'القسم', 'البند / المشروع', 'المبلغ (ر.س)', 'الملاحظات'
     ])
 
-st.title("📊 نظام إدارة العهد والمصاريف الشخصية")
-st.markdown("مرحباً بك يا مهندس وليد. هذا النظام مخصص للفصل بدقة بين مصروفات العمل (العهد) والمصاريف الشخصية.")
+st.title("📊 نظام إدارة العهد والمصاريف الشخصية (خاص)")
+st.markdown("مرحباً بك يا مهندس وليد. نظامك المالي الخاص والمؤمن لتتبع عهد العمل والمصاريف الشخصية.")
 
-# القوائم الجانبية للإدخال
+# --- قسم التحليل الذكي لرسائل البنك النصية (SMS Parser) ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📥 محلل رسائل البنك الآلي")
+sms_input = st.sidebar.text_area("ألصق نص رسالة البنك هنا:", placeholder="مثال: تم خصم مبلغ 250.00 SAR من بطاقة مدى في ...")
+
+detected_amount = 0.0
+detected_type = "صرف (عليه)"
+detected_notes = ""
+
+if sms_input:
+    # استخراج المبلغ باستخدام التعبيرات النمطية (Regex)
+    amount_match = re.search(r'(?:مبلغ|SAR|ر\.س\.?)\s*([\d,.]+)', sms_input)
+    if amount_match:
+        try:
+            detected_amount = float(amount_match.group(1).replace(',', ''))
+        except:
+            detected_amount = 0.0
+    detected_notes = sms_input
+    st.sidebar.success(f"تم تحليل الرسالة بنجاح! المبلغ المستخرج: {detected_amount} ر.س")
+
+# القوائم الجانبية للإدخال اليدوي أو عبر الرسالة
 st.sidebar.header("➕ تسجيل حركة جديدة")
 
-trans_type = st.sidebar.selectbox("نوع الحركة", ["صرف (عليه)", "إيداع / دفعة (له)"])
+trans_type = st.sidebar.selectbox("نوع الحركة", ["صرف (عليه)", "إيداع / دفعة (له)"], index=0)
 section = st.sidebar.selectbox("القسم", ["عهد العمل", "مصروفات شخصية"])
-category = st.sidebar.text_input("البند أو اسم المشروع", placeholder="مثال: مشروع مدرسة المبرز / مواد غذائية")
-amount = st.sidebar.number_input("المبلغ (ريال سعودي)", min_value=0.0, step=10.0)
-notes = st.sidebar.text_area("ملاحظات / تفاصيل إضافية")
+category = st.sidebar.text_input("البند أو اسم المشروع", placeholder="مثال: مشروع مدرسة المبرز / مواد بناء")
+amount = st.sidebar.number_input("المبلغ (ريال سعودي)", min_value=0.0, value=detected_amount, step=10.0)
+notes = st.sidebar.text_area("ملاحظات / تفاصيل إضافية", value=detected_notes)
 
-if st.sidebar.button("حفظ الحركة"):
+if st.sidebar.button("حفظ الحركة في النظام"):
     if amount > 0 and category:
         new_row = pd.DataFrame({
             'التاريخ': [datetime.now().strftime("%Y-%m-%d %H:%M")],
@@ -82,8 +103,8 @@ if not df.empty:
     st.download_button(
         label="📥 تحميل الكشف كملف Excel / CSV",
         data=csv,
-        file_name='financial_report.csv',
+        file_name='my_financial_report.csv',
         mime='text/csv',
     )
 else:
-    st.info("لا توجد حركات مسجلة حتى الآن. استخدم القائمة الجانبية لإضافة أول حركة.")
+    st.info("لا توجد حركات مسجلة حتى الآن. استخدم القائمة الجانبية لإضافة أو لصق أول حركة بنكية.")

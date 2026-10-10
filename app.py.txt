@@ -1,0 +1,89 @@
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+# إعدادات صفحة التطبيق
+st.set_page_config(page_title="إدارة العهد والمصاريف الشخصية", page_icon="💰", layout="wide")
+
+# تهيئة قاعدة بيانات مؤقتة في ذاكرة الجلسة (Session State)
+if 'transactions' not in st.session_state:
+    st.session_state['transactions'] = pd.DataFrame(columns=[
+        'التاريخ', 'النوع', 'القسم', 'البند / المشروع', 'المبلغ (ر.س)', 'الملاحظات'
+    ])
+
+st.title("📊 نظام إدارة العهد والمصاريف الشخصية")
+st.markdown("مرحباً بك يا مهندس وليد. هذا النظام مخصص للفصل بدقة بين مصروفات العمل (العهد) والمصاريف الشخصية.")
+
+# القوائم الجانبية للإدخال
+st.sidebar.header("➕ تسجيل حركة جديدة")
+
+trans_type = st.sidebar.selectbox("نوع الحركة", ["صرف (عليه)", "إيداع / دفعة (له)"])
+section = st.sidebar.selectbox("القسم", ["عهد العمل", "مصروفات شخصية"])
+category = st.sidebar.text_input("البند أو اسم المشروع", placeholder="مثال: مشروع مدرسة المبرز / مواد غذائية")
+amount = st.sidebar.number_input("المبلغ (ريال سعودي)", min_value=0.0, step=10.0)
+notes = st.sidebar.text_area("ملاحظات / تفاصيل إضافية")
+
+if st.sidebar.button("حفظ الحركة"):
+    if amount > 0 and category:
+        new_row = pd.DataFrame({
+            'التاريخ': [datetime.now().strftime("%Y-%m-%d %H:%M")],
+            'النوع': [trans_type],
+            'القسم': [section],
+            'البند / المشروع': [category],
+            'المبلغ (ر.س)': [amount],
+            'الملاحظات': [notes]
+        })
+        st.session_state['transactions'] = pd.concat([st.session_state['transactions'], new_row], ignore_index=True)
+        st.sidebar.success("تم تسجيل الحركة بنجاح!")
+    else:
+        st.sidebar.error("الرجاء إدخال المبلغ وتحديد البند على الأقل.")
+
+# عرض لوحة المؤشرات الرئيسية (Dashboard)
+df = st.session_state['transactions']
+
+col1, col2, col3 = st.columns(3)
+
+if not df.empty:
+    work_df = df[df['قسم'] == 'عهد العمل']
+    personal_df = df[df['قسم'] == 'مصروفات شخصية']
+    
+    # حساب إجماليات عهد العمل
+    work_in = work_df[work_df['النوع'] == 'إيداع / دفعة (له)']['المبلغ (ر.س)'].sum()
+    work_out = work_df[work_df['النوع'] == 'صرف (عليه)']['المبلغ (ر.س)'].sum()
+    work_balance = work_in - work_out
+    
+    # حساب إجماليات المصروفات الشخصية
+    personal_out = personal_df[personal_df['النوع'] == 'صرف (عليه)']['المبلغ (ر.س)'].sum()
+    
+    col1.metric("إجمالي صافي عهد العمل", f"{work_balance:,.2f} ر.س", help="العهدة المستلمة ناقص المصروفات")
+    col2.metric("إجمالي مصروفات العمل", f"{work_out:,.2f} ر.س")
+    col3.metric("إجمالي المصروفات الشخصية", f"{personal_out:,.2f} ر.س")
+else:
+    col1.metric("إجمالي صافي عهد العمل", "0.00 ر.س")
+    col2.metric("إجمالي مصروفات العمل", "0.00 ر.س")
+    col3.metric("إجمالي المصروفات الشخصية", "0.00 ر.س")
+
+st.markdown("---")
+
+# عرض جدول الحركات المفصل مع إمكانية الفلترة
+st.subheader("📋 سجل الحركات المالية التفصيلي")
+
+if not df.empty:
+    filter_section = st.selectbox("تصفية حسب القسم:", ["الكل", "عهد العمل", "مصروفات شخصية"])
+    if filter_section != "الكل":
+        filtered_df = df[df['قسم'] == filter_section]
+    else:
+        filtered_df = df
+        
+    st.dataframe(filtered_df, use_container_width=True)
+    
+    # زر لتصدير البيانات إلى ملف CSV
+    csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
+    st.download_button(
+        label="📥 تحميل الكشف كملف Excel / CSV",
+        data=csv,
+        file_name='financial_report.csv',
+        mime='text/csv',
+    )
+else:
+    st.info("لا توجد حركات مسجلة حتى الآن. استخدم القائمة الجانبية لإضافة أول حركة.")
